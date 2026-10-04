@@ -84,22 +84,45 @@ def download_with_figshare(identifier_dict, target):
             url = f'https://ndownloader.figshare.com/files/{file}'
             urlretrieve(url, target_path)
 
+
 def validate_patch(img_dims, annotations, additional_bbox):
-    # Check if the additional_bbox lies within the image dimensions
-    if additional_bbox[0] < 0 or additional_bbox[1] < 0 or additional_bbox[2] >= img_dims[0] or additional_bbox[3] >= img_dims[1]:
+    """
+    Return True only when the proposed background crop:
+    1. Lies completely within the image.
+    2. Has no positive-area overlap with any annotated bounding box.
+
+    Coordinates use [x1, y1, x2, y2], with exclusive
+    right and bottom boundaries as used by Pillow.
+    """
+    x1, y1, x2, y2 = additional_bbox
+    img_width, img_height = img_dims
+
+    # Reject invalid or out-of-bounds crops.
+    if (
+        x1 < 0
+        or y1 < 0
+        or x2 > img_width
+        or y2 > img_height
+        or x1 >= x2
+        or y1 >= y2
+    ):
         return False
 
-    # Check if the additional_bbox overlaps with any bbox in the annotations        
+    # Reject overlap with any annotated bounding box.
     for annotation in annotations:
-        bbox = annotation['bbox']
-        
-        if bbox[0] < additional_bbox[0] < bbox[2] and bbox[1] < additional_bbox[1] < bbox[3]:
-            return False
-        if bbox[0] < additional_bbox[2] < bbox[2] and bbox[1] < additional_bbox[3] < bbox[3]:
-            return False
-    
-    return True
+        bx1, by1, bx2, by2 = annotation["bbox"]
 
+        overlaps = (
+            x1 < bx2
+            and x2 > bx1
+            and y1 < by2
+            and y2 > by1
+        )
+
+        if overlaps:
+            return False
+
+    return True
 
 def resample_volume(volume_input_path, volume_output_path, interpolator=sitk.sitkLinear, new_spacing=[1.0,.0,.0]):
     reader = sitk.ImageFileReader()
